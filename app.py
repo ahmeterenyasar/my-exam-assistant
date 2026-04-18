@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import streamlit as st
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.llms import Ollama
@@ -59,7 +59,9 @@ def build_rag_chain(vectorstore: Chroma, selected_course: str):
     """)
 
     document_chain = create_stuff_documents_chain(llm, prompt)
-    return create_retrieval_chain(retriever, document_chain)
+    rag_chain = create_retrieval_chain(retriever, document_chain)
+
+    return rag_chain
 
 
 courses = load_courses()
@@ -109,10 +111,11 @@ if prompt := st.chat_input("Ders notlarıyla ilgili ne öğrenmek istersin?"):
 
             with st.expander("Kullanılan Kaynaklar (Referanslar)"):
                 for doc in response.get("context", []):
-                    source = doc.metadata.get("source", "Bilinmeyen kaynak")
-                    page = doc.metadata.get("page", "?")
+                    source = doc.metadata.get("file_name", "Bilinmeyen kaynak")
+                    page_num = doc.metadata.get("page")
+                    display_page = page_num + 1 if isinstance(page_num, int) else "?"
                     snippet = doc.page_content[:200].replace("\n", " ")
-                    st.write(f"📄 {source} | sayfa: {page}")
+                    st.write(f"📄 {source} | sayfa: {display_page}")
                     st.caption(snippet + "...")
 
     # Asistanın cevabını geçmişe kaydet
