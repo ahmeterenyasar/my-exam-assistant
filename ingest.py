@@ -23,7 +23,7 @@ def infer_course_name(pdf_path: Path, data_dir: Path) -> str:
 	relative = pdf_path.relative_to(data_dir)
 	if len(relative.parts) >= 2:
 		return relative.parts[0]
-	return "genel"
+	return "general"
 
 
 def load_documents(pdf_files: list[Path], data_dir: Path):
@@ -53,7 +53,7 @@ def build_vectorstore(reset: bool = False):
 
 	pdf_files = discover_pdf_files(DATA_DIR)
 	if not pdf_files:
-		print("PDF bulunamadi. Lutfen data/<ders_adi>/ klasorlerine PDF dosyalari ekleyin.")
+		print("No PDFs found. Please add PDF files to data/<course_name>/ directories.")
 		return
 
 	docs, courses = load_documents(pdf_files, DATA_DIR)
@@ -62,7 +62,7 @@ def build_vectorstore(reset: bool = False):
 
 	embeddings = OllamaEmbeddings(model="nomic-embed-text")
 	vectorstore = Chroma(
-		collection_name="ders_notlari",
+		collection_name="course_notes",
 		persist_directory=str(CHROMA_DIR),
 		embedding_function=embeddings,
 	)
@@ -82,18 +82,18 @@ def build_vectorstore(reset: bool = False):
 		encoding="utf-8",
 	)
 
-	print("Ingest tamamlandi.")
-	print(f"Toplam PDF: {len(pdf_files)}")
-	print(f"Toplam chunk: {len(split_docs)}")
-	print("Bulunan dersler:", ", ".join(courses))
+	print("Ingestion completed.")
+	print(f"Total PDFs: {len(pdf_files)}")
+	print(f"Total chunks: {len(split_docs)}")
+	print("Courses found:", ", ".join(courses))
 
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="PDF dosyalarini Chroma vektor veritabanina aktarir.")
+	parser = argparse.ArgumentParser(description="Ingests PDF files into Chroma vector database.")
 	parser.add_argument(
 		"--reset",
 		action="store_true",
-		help="Var olan chroma_db klasorunu siler ve sifirdan ingest eder.",
+		help="Deletes existing chroma_db folder and ingests from scratch.",
 	)
 	args = parser.parse_args()
 

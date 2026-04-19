@@ -14,12 +14,12 @@ BASE_DIR = Path(__file__).resolve().parent
 CHROMA_DIR = BASE_DIR / "chroma_db"
 COURSES_FILE = CHROMA_DIR / "courses.json"
 
-# Sayfa ayarları
-st.set_page_config(page_title="Yerel RAG Sınav Asistanı", page_icon="📚")
-st.title("📚 Yerel Sınav Asistanı (Llama 3)")
+# Page configuration
+st.set_page_config(page_title="Local RAG Exam Assistant", page_icon="📚")
+st.title("📚 Local Exam Assistant (Llama 3)")
 
 if not CHROMA_DIR.exists() or not COURSES_FILE.exists():
-    st.error("Vektor veritabani bulunamadi. Once ingest.py calistirmalisin.")
+    st.error("Vector database not found. Please run ingest.py first.")
     st.code("python ingest.py --reset")
     st.stop()
 
@@ -28,7 +28,7 @@ if not CHROMA_DIR.exists() or not COURSES_FILE.exists():
 def load_vectorstore():
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
     return Chroma(
-        collection_name="ders_notlari",
+        collection_name="course_notes",
         persist_directory=str(CHROMA_DIR),
         embedding_function=embeddings,
     )
@@ -42,20 +42,20 @@ def load_courses() -> list[str]:
 
 def build_rag_chain(vectorstore: Chroma, selected_course: str):
     search_kwargs = {"k": 4}
-    if selected_course != "Tum dersler":
+    if selected_course != "All courses":
         search_kwargs["filter"] = {"course": selected_course}
 
     retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
     llm = Ollama(model="llama3")
 
     prompt = ChatPromptTemplate.from_template("""
-    Sen bir sınav hazırlık asistanısın. Aşağıdaki bağlamı kullanarak soruyu cevapla.
-    Eğer cevap bu notlarda yoksa, uydurma, "Notlarda bu bilgi yok" de.
+    You are an exam preparation assistant. Answer the question using the context below.
+    If the answer is not in the notes, do not make it up and say "This information is not in the notes".
     
-    Bağlam: {context}
+    Context: {context}
     
-    Soru: {input}
-    Cevap:
+    Question: {input}
+    Answer:
     """)
 
     document_chain = create_stuff_documents_chain(llm, prompt)
@@ -66,20 +66,20 @@ def build_rag_chain(vectorstore: Chroma, selected_course: str):
 
 courses = load_courses()
 if not courses:
-    st.warning("Ders bulunamadi. PDF'leri data/<ders_adi>/ altina koyup ingest.py calistir.")
+    st.warning("No courses found. Add PDF files to data/<course_name>/ and run ingest.py.")
     st.stop()
 
 vectorstore = load_vectorstore()
 
 selected_course = st.sidebar.selectbox(
-    "Ders Sec",
-    ["Tum dersler"] + courses,
+    "Select Course",
+    ["All courses"] + courses,
 )
 
 rag_chain = build_rag_chain(vectorstore, selected_course)
 
-# --- 2. CHAT ARAYÜZÜ ---
-# Sohbet geçmişini tutmak için session_state kullanıyoruz
+# --- 2. CHAT INTERFACE ---
+# Using session_state to keep chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -90,33 +90,33 @@ if st.session_state.last_course != selected_course:
     st.session_state.messages = []
     st.session_state.last_course = selected_course
 
-# Geçmiş mesajları ekranda göster
+# Display previous messages on screen
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Kullanıcıdan yeni soru al
-if prompt := st.chat_input("Ders notlarıyla ilgili ne öğrenmek istersin?"):
-    # Kullanıcının sorusunu ekrana bas
+# Get new question from user
+if prompt := st.chat_input("What would you like to learn about the course notes?"):
+    # Display user's question on screen
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Modeli çalıştırıp cevabı üret
+    # Run model and generate answer
     with st.chat_message("assistant"):
-        with st.spinner("Notlar taranıyor ve cevap üretiliyor..."):
+        with st.spinner("Scanning notes and generating answer..."):
             response = rag_chain.invoke({"input": prompt})
-            answer = response.get("answer", "Cevap olusturulamadi.")
+            answer = response.get("answer", "Answer could not be generated.")
             st.markdown(answer)
 
-            with st.expander("Kullanılan Kaynaklar (Referanslar)"):
+            with st.expander("Sources Used (References)"):
                 for doc in response.get("context", []):
-                    source = doc.metadata.get("file_name", "Bilinmeyen kaynak")
+                    source = doc.metadata.get("file_name", "Unknown source")
                     page_num = doc.metadata.get("page")
                     display_page = page_num + 1 if isinstance(page_num, int) else "?"
                     snippet = doc.page_content[:200].replace("\n", " ")
-                    st.write(f"📄 {source} | sayfa: {display_page}")
+                    st.write(f"📄 {source} | page: {display_page}")
                     st.caption(snippet + "...")
 
-    # Asistanın cevabını geçmişe kaydet
+    # Save assistant's answer to history
     st.session_state.messages.append({"role": "assistant", "content": answer})
